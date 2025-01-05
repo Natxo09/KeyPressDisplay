@@ -86,15 +86,29 @@ struct KeyPressView: View {
         }
     }
     
+    // Calcular el ancho mínimo basado en el contenido
+    private var minWidth: CGFloat {
+        let hasModifier = displayText.contains("+") || displayText.contains("⌘") || 
+                         displayText.contains("⌥") || displayText.contains("⌃") || 
+                         displayText.contains("⇧")
+        if hasModifier {
+            return 60  // Más ancho para combinaciones
+        } else if displayText.count > 1 {
+            return 45  // Para teclas especiales
+        } else {
+            return 30  // Para teclas simples
+        }
+    }
+    
     var body: some View {
         Text(displayText)
             .font(.system(size: settings.fontSize))
             .foregroundColor(settings.keyTextColor)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 6)  // Reducido de 8 a 6
             .padding(.vertical, 4)
-            .frame(minWidth: 30)
+            .frame(minWidth: minWidth)
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(settings.keyBackgroundColor)

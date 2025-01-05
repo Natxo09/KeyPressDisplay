@@ -59,11 +59,16 @@ class KeyEventMonitor {
         
         // Detectar teclas normales
         if let characters = event.charactersIgnoringModifiers {
-            // Añadir modificadores
-            if modifiers.contains(.command) { keyString += "⌘+" }
-            if modifiers.contains(.option) { keyString += "⌥+" }
-            if modifiers.contains(.control) { keyString += "⌃+" }
-            if modifiers.contains(.shift) { keyString += "⇧+" }
+            // Añadir modificadores de forma más compacta
+            if modifiers.contains(.command) { keyString += "⌘" }
+            if modifiers.contains(.option) { keyString += "⌥" }
+            if modifiers.contains(.control) { keyString += "⌃" }
+            if modifiers.contains(.shift) { keyString += "⇧" }
+            
+            // Si hay modificadores, añadir el separador
+            if !keyString.isEmpty {
+                keyString += "+"
+            }
             
             // Manejar teclas especiales
             switch event.keyCode {
