@@ -21,9 +21,9 @@ class Settings: ObservableObject, Equatable {
     @AppStorage("spacing") var spacing: Double = 4.0
     @AppStorage("caseStyle") private var caseStyleRawValue: String = CaseStyle.auto.rawValue
     
-    // Propiedades computadas para position
-    @AppStorage("positionX") private var positionX: Double = 100
-    @AppStorage("positionY") private var positionY: Double = 100
+    // Propiedades computadas para position con valores por defecto más seguros
+    @AppStorage("positionX") private var positionX: Double = Double(NSScreen.main?.visibleFrame.maxX ?? 100) - 250
+    @AppStorage("positionY") private var positionY: Double = Double(NSScreen.main?.visibleFrame.minY ?? 100) + 100
     
     // Propiedades computadas para colores
     @AppStorage("keyBackgroundColorHex") private var keyBackgroundColorHex: String = "#80000000"

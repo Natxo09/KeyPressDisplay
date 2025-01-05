@@ -12,44 +12,80 @@ import AppKit
 struct ContentView: View {
     @ObservedObject var settings: Settings
     @State private var keyPresses: [KeyPress] = []
+    @State private var isDragging: Bool = false
+    @State private var isCommandPressed: Bool = false
     
     var body: some View {
-        Group {
-            if settings.orientation == .vertical {
-                VStack(spacing: settings.spacing) {
-                    ForEach(keyPresses.suffix(settings.maxVisibleKeys)) { keyPress in
-                        KeyPressView(keyPress: keyPress, settings: settings)
+        GeometryReader { geometry in
+            Group {
+                if settings.orientation == .vertical {
+                    VStack(spacing: settings.spacing) {
+                        ForEach(keyPresses.suffix(settings.maxVisibleKeys)) { keyPress in
+                            KeyPressView(keyPress: keyPress, settings: settings)
+                        }
                     }
-                }
-            } else {
-                HStack(spacing: settings.spacing) {
-                    ForEach(keyPresses.suffix(settings.maxVisibleKeys)) { keyPress in
-                        KeyPressView(keyPress: keyPress, settings: settings)
+                } else {
+                    HStack(spacing: settings.spacing) {
+                        ForEach(keyPresses.suffix(settings.maxVisibleKeys)) { keyPress in
+                            KeyPressView(keyPress: keyPress, settings: settings)
+                        }
                     }
                 }
             }
+            .padding()
+            .background(settings.showBackground ? settings.keyBackgroundColor : Color.clear)
+            .cornerRadius(12)
+            .opacity(isDragging ? 0.6 : settings.opacity)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.white.opacity(isCommandPressed ? 0.5 : 0), lineWidth: 2)
+            )
+            .position(x: geometry.size.width/2, y: geometry.size.height/2)
         }
-        .padding()
-        .background(settings.showBackground ? settings.keyBackgroundColor : Color.clear)
-        .cornerRadius(12)
-        .opacity(settings.opacity)
+        .frame(width: 200, height: 100)
+        .background(Color.clear)
         .onAppear {
-            KeyEventMonitor.shared.startMonitoring { key in
-                print("Tecla presionada: \(key)")
-                addKeyPress(key)
-            }
-            
-            // Añadir monitor para ⌘,
-            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "," {
-                    SettingsWindowManager.shared.showSettings(settings: settings)
-                    return nil
-                }
-                return event
-            }
+            setupKeyMonitoring()
+            setupCommandKeyMonitoring()
         }
         .onDisappear {
             KeyEventMonitor.shared.stopMonitoring()
+        }
+        .allowsHitTesting(true)
+    }
+    
+    private func setupKeyMonitoring() {
+        KeyEventMonitor.shared.startMonitoring { key in
+            print("Tecla presionada: \(key)")
+            addKeyPress(key)
+        }
+        
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "," {
+                SettingsWindowManager.shared.showSettings(settings: settings)
+                return nil
+            }
+            return event
+        }
+    }
+    
+    private func setupCommandKeyMonitoring() {
+        // Monitor para la tecla Command
+        NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            isCommandPressed = event.modifierFlags.contains(.command)
+            
+            if let window = NSApplication.shared.windows.first {
+                // Permitir clicks solo cuando Command está presionado
+                window.ignoresMouseEvents = !isCommandPressed
+                
+                // Cambiar el cursor según corresponda
+                if isCommandPressed {
+                    NSCursor.openHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            return event
         }
     }
     
@@ -173,48 +209,53 @@ struct SettingsView: View {
             
             Section("Posición") {
                 // Selector de pantalla
-                if NSScreen.screens.count > 1 {
-                    Picker("Pantalla:", selection: $selectedScreen) {
-                        ForEach(NSScreen.screens, id: \.self) { screen in
-                            Text("Pantalla \(NSScreen.screens.firstIndex(of: screen)! + 1)")
-                                .tag(screen)
+                Picker("Pantalla:", selection: $selectedScreen) {
+                    ForEach(NSScreen.screens, id: \.self) { screen in
+                        HStack {
+                            Text(screen.localizedName)
+                            if screen == NSScreen.main {
+                                Text(" (Principal)")
+                            }
                         }
-                    }
-                    .onChange(of: selectedScreen) { screen in
-                        moveToScreen(screen)
+                        .tag(screen)
                     }
                 }
+                .onChange(of: selectedScreen) { screen in
+                    moveToScreen(screen)
+                }
                 
-                // Botones de posición predefinida
+                // Posiciones predefinidas
                 HStack {
-                    Text("Posición predefinida:")
+                    Text("Posición:")
                     Spacer()
                     Button("Superior Izquierda") { moveToPosition(.topLeft) }
                     Button("Superior Derecha") { moveToPosition(.topRight) }
                 }
+                
                 HStack {
                     Spacer()
                     Button("Centro") { moveToPosition(.center) }
                 }
+                
                 HStack {
                     Spacer()
                     Button("Inferior Izquierda") { moveToPosition(.bottomLeft) }
                     Button("Inferior Derecha") { moveToPosition(.bottomRight) }
                 }
                 
-                // Controles de ajuste fino
-                HStack {
+                // Ajuste fino
+                VStack(alignment: .leading) {
                     Text("Ajuste fino:")
-                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button("←") { adjustPosition(dx: -20, dy: 0) }
+                        Button("↑") { adjustPosition(dx: 0, dy: 20) }
+                        Button("↓") { adjustPosition(dx: 0, dy: -20) }
+                        Button("→") { adjustPosition(dx: 20, dy: 0) }
+                        Spacer()
+                    }
+                    .buttonStyle(.bordered)
                 }
-                
-                HStack {
-                    Button("←") { adjustPosition(dx: -20, dy: 0) }
-                    Button("↑") { adjustPosition(dx: 0, dy: 20) }
-                    Button("↓") { adjustPosition(dx: 0, dy: -20) }
-                    Button("→") { adjustPosition(dx: 20, dy: 0) }
-                }
-                .buttonStyle(.bordered)
             }
             
             Section("Vista previa") {
@@ -236,82 +277,65 @@ struct SettingsView: View {
         }
     }
     
-    private enum ScreenPosition {
+    private enum Position {
         case topLeft, topRight, center, bottomLeft, bottomRight
     }
     
     private func moveToScreen(_ screen: NSScreen) {
-        let screenFrame = screen.visibleFrame
-        let padding: CGFloat = 20
-        
-        // Mantener la posición relativa en la nueva pantalla
-        let currentPosition = settings.position
-        let currentScreen = NSScreen.main?.visibleFrame ?? screenFrame
-        
-        let relativeX = (currentPosition.x - currentScreen.minX) / currentScreen.width
-        let relativeY = (currentPosition.y - currentScreen.minY) / currentScreen.height
-        
-        settings.position = CGPoint(
-            x: screenFrame.minX + (screenFrame.width * relativeX),
-            y: screenFrame.minY + (screenFrame.height * relativeY)
-        )
-        
-        // Asegurarse de que la ventana esté dentro de los límites
-        settings.position = CGPoint(
-            x: min(max(settings.position.x, screenFrame.minX + padding),
-                  screenFrame.maxX - padding),
-            y: min(max(settings.position.y, screenFrame.minY + padding),
-                  screenFrame.maxY - padding)
-        )
+        if let window = NSApplication.shared.windows.first {
+            let screenFrame = screen.visibleFrame
+            let windowSize = window.frame.size
+            
+            // Calcular nueva posición manteniendo la posición relativa
+            let currentScreen = selectedScreen
+            let currentFrame = currentScreen.visibleFrame
+            let relativeX = (settings.position.x - currentFrame.minX) / currentFrame.width
+            let relativeY = (settings.position.y - currentFrame.minY) / currentFrame.height
+            
+            let newX = screenFrame.minX + (screenFrame.width * relativeX)
+            let newY = screenFrame.minY + (screenFrame.height * relativeY)
+            
+            // Actualizar posición
+            settings.position = CGPoint(x: newX, y: newY)
+            
+            // Mover la ventana
+            window.setFrame(NSRect(
+                x: newX - windowSize.width/2,
+                y: newY - windowSize.height/2,
+                width: windowSize.width,
+                height: windowSize.height
+            ), display: true)
+        }
     }
     
-    private func moveToPosition(_ position: ScreenPosition) {
-        let screen = selectedScreen
-        let screenFrame = screen.visibleFrame
+    private func moveToPosition(_ position: Position) {
+        let screenFrame = selectedScreen.visibleFrame
         let padding: CGFloat = 20
         
         switch position {
         case .topLeft:
-            settings.position = CGPoint(
-                x: screenFrame.minX + padding,
-                y: screenFrame.maxY - padding
-            )
+            settings.position = CGPoint(x: screenFrame.minX + padding, y: screenFrame.maxY - padding)
         case .topRight:
-            settings.position = CGPoint(
-                x: screenFrame.maxX - padding,
-                y: screenFrame.maxY - padding
-            )
+            settings.position = CGPoint(x: screenFrame.maxX - padding, y: screenFrame.maxY - padding)
         case .center:
-            settings.position = CGPoint(
-                x: screenFrame.midX,
-                y: screenFrame.midY
-            )
+            settings.position = CGPoint(x: screenFrame.midX, y: screenFrame.midY)
         case .bottomLeft:
-            settings.position = CGPoint(
-                x: screenFrame.minX + padding,
-                y: screenFrame.minY + padding
-            )
+            settings.position = CGPoint(x: screenFrame.minX + padding, y: screenFrame.minY + padding)
         case .bottomRight:
-            settings.position = CGPoint(
-                x: screenFrame.maxX - padding,
-                y: screenFrame.minY + padding
-            )
+            settings.position = CGPoint(x: screenFrame.maxX - padding, y: screenFrame.minY + padding)
         }
     }
     
     private func adjustPosition(dx: CGFloat, dy: CGFloat) {
-        let screen = selectedScreen
-        let screenFrame = screen.visibleFrame
+        let screenFrame = selectedScreen.visibleFrame
         let padding: CGFloat = 20
-        
         let newX = settings.position.x + dx
         let newY = settings.position.y + dy
         
+        // Mantener dentro de los límites de la pantalla
         settings.position = CGPoint(
-            x: min(max(newX, screenFrame.minX + padding),
-                  screenFrame.maxX - padding),
-            y: min(max(newY, screenFrame.minY + padding),
-                  screenFrame.maxY - padding)
+            x: min(max(newX, screenFrame.minX + padding), screenFrame.maxX - padding),
+            y: min(max(newY, screenFrame.minY + padding), screenFrame.maxY - padding)
         )
     }
 }
