@@ -89,7 +89,7 @@ struct KeyPressDisplayApp: App {
             window.isOpaque = false
             window.level = .floating
             window.hasShadow = false
-            window.isMovableByWindowBackground = true
+            window.isMovableByWindowBackground = false
             
             // Inicialmente ignorar eventos del mouse
             window.ignoresMouseEvents = true
@@ -99,32 +99,26 @@ struct KeyPressDisplayApp: App {
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             
-            // Posicionar la ventana
-            moveWindowToPosition(window: window, position: settings.position)
-            
-            // Observar cambios en la posición
-            NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: window, queue: .main) { _ in
-                if window.isMoving {  // Solo actualizar si está siendo arrastrada
-                    let newPosition = CGPoint(
-                        x: window.frame.origin.x + window.frame.width/2,
-                        y: window.frame.origin.y + window.frame.height/2
+            // Asegurarse de que hay una posición inicial válida
+            if settings.position == .zero {
+                if let screen = NSScreen.main {
+                    let screenFrame = screen.visibleFrame
+                    settings.position = CGPoint(
+                        x: screenFrame.maxX - 250,
+                        y: screenFrame.minY + 100
                     )
-                    settings.position = newPosition
-                    
-                    // Guardar la pantalla actual
-                    if let currentScreen = window.screen {
-                        UserDefaults.standard.set(currentScreen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0, forKey: "lastScreenID")
-                    }
                 }
             }
             
-            // Restaurar la última pantalla conocida
-            if let lastScreenID = UserDefaults.standard.object(forKey: "lastScreenID") as? CGDirectDisplayID,
-               let lastScreen = NSScreen.screens.first(where: { screen in
-                   screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID == lastScreenID
-               }) {
-                moveWindowToScreen(window: window, screen: lastScreen)
-            }
+            // Posicionar la ventana usando la posición de settings
+            window.setFrame(NSRect(
+                x: settings.position.x - window.frame.width/2,
+                y: settings.position.y - window.frame.height/2,
+                width: 200,
+                height: 100
+            ), display: true)
+            
+            print("Ventana configurada en posición: \(settings.position)")
         }
     }
     
